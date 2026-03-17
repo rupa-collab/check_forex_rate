@@ -47,8 +47,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.checkrate.app.R
 import com.checkrate.app.util.RateUtils
@@ -164,20 +167,11 @@ private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
             }
         }
     }
-    item {
-        RateHeader(baseCurrency = state.settings.baseCurrency,
-            lastUpdated = state.lastRates.fxUpdatedEpochMillis
-        )
-    }
 
     item {
-        LiveModeSection(
-            enabled = state.settings.liveModeEnabled,
-            intervalMinutes = state.settings.liveModeIntervalMinutes,
-            onToggle = vm::setLiveModeEnabled,
-            onIntervalChange = vm::setLiveModeInterval,
-            onSendNow = vm::sendLiveUpdateNow,
-            sendingNow = state.isSendingLiveUpdate
+        RateHeader(
+            baseCurrency = state.settings.baseCurrency,
+            lastUpdated = state.lastRates.fxUpdatedEpochMillis
         )
     }
 
@@ -217,6 +211,17 @@ private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
             containerColor = Color(0xFFF7F2E8)
         )
     }
+
+    item {
+        LiveModeSection(
+            enabled = state.settings.liveModeEnabled,
+            intervalMinutes = state.settings.liveModeIntervalMinutes,
+            onToggle = vm::setLiveModeEnabled,
+            onIntervalChange = vm::setLiveModeInterval,
+            onSendNow = vm::sendLiveUpdateNow,
+            sendingNow = state.isSendingLiveUpdate
+        )
+    }
 }
 private fun LazyListScope.alertsTab(state: RateUiState, vm: RateViewModel) {
     item {
@@ -229,6 +234,7 @@ private fun LazyListScope.alertsTab(state: RateUiState, vm: RateViewModel) {
         )
     }
 }
+
 
 private fun LazyListScope.thresholdsTab(state: RateUiState, vm: RateViewModel) {
     item {
@@ -402,16 +408,26 @@ private fun LiveModeSection(
                 singleLine = true
             )
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    val value = intervalText.toIntOrNull()
-                    if (value != null && value >= 15) {
-                        onIntervalChange(value)
-                    }
-                }) {
-                    Text("Update Interval")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = {
+                        val value = intervalText.toIntOrNull()
+                        if (value != null && value >= 15) {
+                            onIntervalChange(value)
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Update Interval", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
-                Button(onClick = onSendNow, enabled = !sendingNow) {
+                Button(
+                    onClick = onSendNow,
+                    enabled = !sendingNow,
+                    modifier = Modifier.weight(1f)
+                ) {
                     if (sendingNow) {
                         CircularProgressIndicator(
                             modifier = Modifier
@@ -422,9 +438,10 @@ private fun LiveModeSection(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (sendingNow) "Sending..." else "Send Live Update Now")
+                    Text(if (sendingNow) "Sending..." else "Send Live Update Now", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp))
                 }
             }
+                
         }
     }
 }

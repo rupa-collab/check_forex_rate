@@ -2,13 +2,28 @@ package com.checkrate.app.notifications
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.checkrate.app.MainActivity
 import com.checkrate.app.R
 
 class Notifier(private val context: Context) {
     private val manager = NotificationManagerCompat.from(context)
+
+    private fun contentPendingIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
 
     fun ensureChannels() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -38,6 +53,8 @@ class Notifier(private val context: Context) {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(message)
+            .setContentIntent(contentPendingIntent())
+            .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
@@ -50,6 +67,8 @@ class Notifier(private val context: Context) {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Daily FX Summary")
             .setContentText(message)
+            .setContentIntent(contentPendingIntent())
+            .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
@@ -62,6 +81,7 @@ class Notifier(private val context: Context) {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("FX and Gold/Silver Rate")
             .setContentText(message)
+            .setContentIntent(contentPendingIntent())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
