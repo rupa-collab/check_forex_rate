@@ -1,0 +1,38 @@
+﻿# Gradle
+.gradle/
+build/
+**/build/
+
+# Local config
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Keystore files
+*.jks
+*.keystore
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# NDK
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# Generated files
+captures/
+
+# Downloads / temp
+_gradle_extract/
+*.hprof
+gradle-*-bin.zip
