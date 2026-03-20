@@ -1,4 +1,4 @@
-﻿# Check Forex Rate
+# Check Forex Rate
 
 Android app to track FX (USD/GBP) and metals (Gold/Silver) in INR with alerts, live mode, and on‑demand FX refresh.
 
@@ -32,3 +32,8 @@ Android app to track FX (USD/GBP) and metals (Gold/Silver) in INR with alerts, l
 
 ## License
 Private / internal use.
+
+## Authentication
+- Signup/Login is required on first launch.
+- Email verification is currently skipped.
+- Set AUTH_API_BASE_URL in local.properties to point to the backend.
