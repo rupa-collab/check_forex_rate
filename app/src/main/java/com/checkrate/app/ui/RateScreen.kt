@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -49,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,6 +82,16 @@ fun RateScreen() {
     val vm: RateViewModel = viewModel()
     val state by vm.uiState.collectAsState()
     var selectedTab by remember { mutableStateOf(TabItem.LIVE) }
+
+    if (state.authToken.isBlank()) {
+        AuthScreen(
+            authLoading = state.authLoading,
+            authError = state.authErrorMessage,
+            onLogin = vm::login,
+            onSignup = vm::signup
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -274,6 +286,72 @@ private fun LazyListScope.settingsTab(state: RateUiState, vm: RateViewModel) {
     }
 }
 
+@Composable
+private fun AuthScreen(
+    authLoading: Boolean,
+    authError: String?,
+    onLogin: (String, String) -> Unit,
+    onSignup: (String, String) -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isSignup by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Check Forex Rate") })
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { isSignup = false }) { Text("Login") }
+                Button(onClick = { isSignup = true }) { Text("Sign Up") }
+            }
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (!authError.isNullOrBlank()) {
+                Text(authError, color = MaterialTheme.colorScheme.error)
+            }
+
+            Button(
+                onClick = {
+                    if (isSignup) {
+                        onSignup(email.trim(), password)
+                    } else {
+                        onLogin(email.trim(), password)
+                    }
+                },
+                enabled = !authLoading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (authLoading) "Please wait..." else if (isSignup) "Create Account" else "Login")
+            }
+        }
+    }
+}
 @Composable
 private fun RateHeader(baseCurrency: String, lastUpdated: Long, onRefresh: (() -> Unit)? = null,
                        refreshing: Boolean = false) {

@@ -1,4 +1,4 @@
-﻿import java.util.Properties
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -15,8 +15,7 @@ val localProperties = Properties().apply {
 
 val apiKeyFromLocal = localProperties.getProperty("EXCHANGE_RATE_API_KEY")
 val apiKeyFromGradle = project.findProperty("EXCHANGE_RATE_API_KEY") as String?
-val exchangeRateApiKey = (apiKeyFromLocal ?: apiKeyFromGradle ?: "").trim()
-
+val exchangeRateApiKey = (apiKeyFromLocal ?: apiKeyFromGradle ?: "").trim()\r\n\r\nval authBaseFromLocal = localProperties.getProperty("AUTH_API_BASE_URL")\r\nval authBaseFromGradle = project.findProperty("AUTH_API_BASE_URL") as String?\r\nval authApiBaseUrl = (authBaseFromLocal ?: authBaseFromGradle ?: "").trim()\r\n
 android {
     namespace = "com.checkrate.app"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -62,10 +61,7 @@ android {
 
 androidComponents {
     onVariants { variant ->
-        variant.buildConfigFields?.put(
-            "EXCHANGE_RATE_API_KEY",
-            com.android.build.api.variant.BuildConfigField("String", "\"$exchangeRateApiKey\"", "")
-        )
+        variant.buildConfigFields?.put(\r\n            "EXCHANGE_RATE_API_KEY",\r\n            com.android.build.api.variant.BuildConfigField("String", "\"$exchangeRateApiKey\"", "")\r\n        )\r\n        variant.buildConfigFields?.put(\r\n            "AUTH_API_BASE_URL",\r\n            com.android.build.api.variant.BuildConfigField("String", "\"$authApiBaseUrl\"", "")\r\n        )
     }
 }
 

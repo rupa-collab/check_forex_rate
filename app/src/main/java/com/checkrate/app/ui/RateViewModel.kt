@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.checkrate.app.BuildConfig
 import com.checkrate.app.data.AppSettings
+import com.checkrate.app.data.AuthApi
+import com.checkrate.app.data.AuthRepository
 import com.checkrate.app.data.ExchangeRateApi
 import com.checkrate.app.data.GoldApiClient
 import com.checkrate.app.data.LastRates
@@ -23,9 +25,12 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     private val settingsRepository = SettingsRepository(app)
     private val apiKey = BuildConfig.EXCHANGE_RATE_API_KEY
     private val repository = RateRepository(ExchangeRateApi(apiKey), GoldApiClient(), settingsRepository)
+    private val authRepository = AuthRepository(AuthApi(BuildConfig.AUTH_API_BASE_URL), settingsRepository)
 
     private val _refreshing = MutableStateFlow(false)
     private val _sendingLiveUpdate = MutableStateFlow(false)
+    private val _authLoading = MutableStateFlow(false)
+    private val _authError = MutableStateFlow<String?>(null)
     private val _errorMessage = MutableStateFlow<String?>(null)
 
     private val cooldownMinutes = 60
@@ -35,14 +40,22 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     val uiState = combine(
         settingsRepository.settingsFlow,
         settingsRepository.lastRatesFlow,
+        settingsRepository.authTokenFlow,
+        settingsRepository.authEmailFlow,
         _refreshing,
         _sendingLiveUpdate,
+        _authLoading,
+        _authError,
         _errorMessage
-    ) { settings, lastRates, refreshing, sendingLiveUpdate, error ->
+    ) { settings, lastRates, authToken, authEmail, refreshing, sendingLiveUpdate, authLoading, authError, error ->
         RateUiState(
             settings = settings,
             lastRates = lastRates,
             apiKeyMissing = apiKey.isBlank(),
+            authToken = authToken,
+            authEmail = authEmail,
+            authLoading = authLoading,
+            authErrorMessage = authError,
             isRefreshing = refreshing,
             isSendingLiveUpdate = sendingLiveUpdate,
             errorMessage = error
@@ -50,7 +63,6 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RateUiState())
 
     fun refreshRates() {
-
         if (apiKey.isBlank()) {
             _errorMessage.value = "Missing API key"
             return
@@ -73,6 +85,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
     fun refreshMetalsOnly() {
         viewModelScope.launch {
             _refreshing.value = true
@@ -94,6 +107,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
     fun sendLiveUpdateNow() {
         if (apiKey.isBlank()) {
             _errorMessage.value = "Missing API key"
@@ -190,12 +204,50 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
         val notifier = Notifier(getApplication())
         notifier.sendRateAlert("Test alert", "Notifications are working", 9999)
     }
+
+    fun signup(email: String, password: String) {
+        viewModelScope.launch {
+            _authLoading.value = true
+            _authError.value = null
+            try {
+                authRepository.signupAndLogin(email, password)
+            } catch (ex: Exception) {
+                _authError.value = ex.message ?: "Signup failed"
+            } finally {
+                _authLoading.value = false
+            }
+        }
+    }
+
+    fun login(email: String, password: String) {
+        viewModelScope.launch {
+            _authLoading.value = true
+            _authError.value = null
+            try {
+                authRepository.login(email, password)
+            } catch (ex: Exception) {
+                _authError.value = ex.message ?: "Login failed"
+            } finally {
+                _authLoading.value = false
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.logout()
+        }
+    }
 }
 
 data class RateUiState(
     val settings: AppSettings = AppSettings(),
     val lastRates: LastRates = LastRates(),
     val apiKeyMissing: Boolean = false,
+    val authToken: String = "",
+    val authEmail: String = "",
+    val authLoading: Boolean = false,
+    val authErrorMessage: String? = null,
     val isRefreshing: Boolean = false,
     val isSendingLiveUpdate: Boolean = false,
     val errorMessage: String? = null

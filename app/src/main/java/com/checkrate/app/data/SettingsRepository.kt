@@ -35,6 +35,8 @@ class SettingsRepository(private val context: Context) {
         val monthlyRequestCount = intPreferencesKey("monthly_request_count")
         val monthlyRequestMonth = stringPreferencesKey("monthly_request_month")
         val lastRequestEpoch = longPreferencesKey("last_request_epoch")
+        val authToken = stringPreferencesKey("auth_token")
+        val authEmail = stringPreferencesKey("auth_email")
     }
 
     private val defaultMetals = setOf("XAU", "XAG", "XAU22")
@@ -71,6 +73,14 @@ class SettingsRepository(private val context: Context) {
             requestMonthKey = currentMonth,
             lastRequestEpochMillis = lastRequestEpoch
         )
+    }
+
+    val authTokenFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.authToken] ?: ""
+    }
+
+    val authEmailFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.authEmail] ?: ""
     }
 
     val lastRatesFlow: Flow<LastRates> = context.dataStore.data.map { prefs ->
@@ -162,6 +172,20 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun getLastRates(): LastRates = lastRatesFlow.first()
+
+    suspend fun setAuthToken(token: String, email: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.authToken] = token
+            prefs[Keys.authEmail] = email
+        }
+    }
+
+    suspend fun clearAuthToken() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.authToken)
+            prefs.remove(Keys.authEmail)
+        }
+    }
 
     suspend fun incrementMonthlyRequestCount() {
         context.dataStore.edit { prefs ->
