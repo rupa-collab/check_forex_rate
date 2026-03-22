@@ -32,6 +32,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     private val _authLoading = MutableStateFlow(false)
     private val _authError = MutableStateFlow<String?>(null)
     private val _authOtpHint = MutableStateFlow<String?>(null)
+    private val _authOtpRequested = MutableStateFlow(false)
     private val _errorMessage = MutableStateFlow<String?>(null)
 
     private val cooldownMinutes = 60
@@ -48,8 +49,9 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
         _authLoading,
         _authError,
         _authOtpHint,
+        _authOtpRequested,
         _errorMessage
-    ) { settings, lastRates, authToken, authEmail, refreshing, sendingLiveUpdate, authLoading, authError, authOtpHint, error ->
+    ) { settings, lastRates, authToken, authEmail, refreshing, sendingLiveUpdate, authLoading, authError, authOtpHint, authOtpRequested, error ->
         RateUiState(
             settings = settings,
             lastRates = lastRates,
@@ -59,6 +61,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             authLoading = authLoading,
             authErrorMessage = authError,
             authOtpHint = authOtpHint,
+            authOtpRequested = authOtpRequested,
             isRefreshing = refreshing,
             isSendingLiveUpdate = sendingLiveUpdate,
             errorMessage = error
@@ -213,15 +216,23 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             _authLoading.value = true
             _authError.value = null
             _authOtpHint.value = null
+            _authOtpRequested.value = false
             try {
                 val otp = authRepository.requestOtp(email)
                 _authOtpHint.value = if (otp.isBlank()) null else "OTP (dev): $otp"
+                _authOtpRequested.value = true
             } catch (ex: Exception) {
                 _authError.value = ex.message ?: "OTP request failed"
             } finally {
                 _authLoading.value = false
             }
         }
+    }
+
+    fun resetOtpFlow() {
+        _authOtpRequested.value = false
+        _authOtpHint.value = null
+        _authError.value = null
     }
 
     fun verifyOtp(email: String, password: String, otp: String) {
@@ -231,6 +242,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 authRepository.verifyOtp(email, password, otp)
                 _authOtpHint.value = null
+                _authOtpRequested.value = false
             } catch (ex: Exception) {
                 _authError.value = ex.message ?: "OTP verification failed"
             } finally {
@@ -269,6 +281,7 @@ data class RateUiState(
     val authLoading: Boolean = false,
     val authErrorMessage: String? = null,
     val authOtpHint: String? = null,
+    val authOtpRequested: Boolean = false,
     val isRefreshing: Boolean = false,
     val isSendingLiveUpdate: Boolean = false,
     val errorMessage: String? = null
