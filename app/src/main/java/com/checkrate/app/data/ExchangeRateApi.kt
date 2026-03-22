@@ -1,4 +1,4 @@
-﻿package com.checkrate.app.data
+package com.checkrate.app.data
 
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -18,7 +18,7 @@ class ExchangeRateApi(private val apiKey: String) {
         }
 
         val currencyList = currencies.joinToString(",")
-        val endpoint = "https://api.exchangerate.host/live?access_key=$apiKey&currencies=$currencyList"
+        val endpoint = "http://api.currencylayer.com/live?access_key=$apiKey&currencies=$currencyList"
         val connection = URL(endpoint).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 10000

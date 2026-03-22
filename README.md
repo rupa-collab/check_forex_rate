@@ -11,7 +11,7 @@ Android app to track FX (USD/GBP) and metals (Gold/Silver) in INR with alerts, l
 - Request usage display and API usage tracking
 
 ## APIs
-- FX: https://exchangerate.host/ (API key required)
+- FX: http://api.currencylayer.com/live (API key required)
 - Metals: https://api.gold-api.com/price (free endpoints)
 
 ## Setup
