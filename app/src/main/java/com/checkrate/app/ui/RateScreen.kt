@@ -87,8 +87,10 @@ fun RateScreen() {
         AuthScreen(
             authLoading = state.authLoading,
             authError = state.authErrorMessage,
+            authOtpHint = state.authOtpHint,
             onLogin = vm::login,
-            onSignup = vm::signup
+            onRequestOtp = vm::requestOtp,
+            onVerifyOtp = vm::verifyOtp
         )
         return
     }

@@ -31,6 +31,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     private val _sendingLiveUpdate = MutableStateFlow(false)
     private val _authLoading = MutableStateFlow(false)
     private val _authError = MutableStateFlow<String?>(null)
+    private val _authOtpHint = MutableStateFlow<String?>(null)
     private val _errorMessage = MutableStateFlow<String?>(null)
 
     private val cooldownMinutes = 60
@@ -46,8 +47,9 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
         _sendingLiveUpdate,
         _authLoading,
         _authError,
+        _authOtpHint,
         _errorMessage
-    ) { settings, lastRates, authToken, authEmail, refreshing, sendingLiveUpdate, authLoading, authError, error ->
+    ) { settings, lastRates, authToken, authEmail, refreshing, sendingLiveUpdate, authLoading, authError, authOtpHint, error ->
         RateUiState(
             settings = settings,
             lastRates = lastRates,
@@ -56,6 +58,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             authEmail = authEmail,
             authLoading = authLoading,
             authErrorMessage = authError,
+            authOtpHint = authOtpHint,
             isRefreshing = refreshing,
             isSendingLiveUpdate = sendingLiveUpdate,
             errorMessage = error
@@ -205,14 +208,31 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
         notifier.sendRateAlert("Test alert", "Notifications are working", 9999)
     }
 
-    fun signup(email: String, password: String) {
+    fun requestOtp(email: String) {
+        viewModelScope.launch {
+            _authLoading.value = true
+            _authError.value = null
+            _authOtpHint.value = null
+            try {
+                val otp = authRepository.requestOtp(email)
+                _authOtpHint.value = if (otp.isBlank()) null else "OTP (dev): $otp"
+            } catch (ex: Exception) {
+                _authError.value = ex.message ?: "OTP request failed"
+            } finally {
+                _authLoading.value = false
+            }
+        }
+    }
+
+    fun verifyOtp(email: String, password: String, otp: String) {
         viewModelScope.launch {
             _authLoading.value = true
             _authError.value = null
             try {
-                authRepository.signupAndLogin(email, password)
+                authRepository.verifyOtp(email, password, otp)
+                _authOtpHint.value = null
             } catch (ex: Exception) {
-                _authError.value = ex.message ?: "Signup failed"
+                _authError.value = ex.message ?: "OTP verification failed"
             } finally {
                 _authLoading.value = false
             }
@@ -248,6 +268,7 @@ data class RateUiState(
     val authEmail: String = "",
     val authLoading: Boolean = false,
     val authErrorMessage: String? = null,
+    val authOtpHint: String? = null,
     val isRefreshing: Boolean = false,
     val isSendingLiveUpdate: Boolean = false,
     val errorMessage: String? = null

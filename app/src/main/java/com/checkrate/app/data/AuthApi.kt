@@ -1,4 +1,4 @@
-﻿package com.checkrate.app.data
+package com.checkrate.app.data
 
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -7,8 +7,23 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class AuthApi(private val baseUrl: String) {
-    fun signup(email: String, password: String) {
-        requestJson("/auth/signup", JSONObject(mapOf("email" to email, "password" to password)))
+    fun requestOtp(email: String): String {
+        val response = requestJson("/auth/request-otp", JSONObject(mapOf("email" to email)))
+        val json = JSONObject(response)
+        return json.optString("otp", "")
+    }
+
+    fun verifyOtp(email: String, password: String, otp: String): String {
+        val response = requestJson(
+            "/auth/verify-otp",
+            JSONObject(mapOf("email" to email, "password" to password, "otp" to otp))
+        )
+        val json = JSONObject(response)
+        val token = json.optString("access_token", "")
+        if (token.isBlank()) {
+            throw IllegalStateException("Missing access token")
+        }
+        return token
     }
 
     fun login(email: String, password: String): String {
