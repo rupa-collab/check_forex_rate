@@ -1,7 +1,11 @@
 package com.checkrate.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,12 +23,17 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,12 +41,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import com.checkrate.app.ui.appOutlinedTextFieldColors
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,22 +58,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.checkrate.app.BuildConfig
 import com.checkrate.app.R
 import com.checkrate.app.util.RateUtils
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
+import kotlin.math.abs
+import kotlinx.coroutines.delay
 private enum class TabItem(val title: String) {
     LIVE("Live Mode"),
     ALERTS("Alerts"),
@@ -81,7 +97,16 @@ private fun displayName(code: String): String = when (code) {
 fun RateScreen() {
     val vm: RateViewModel = viewModel()
     val state by vm.uiState.collectAsState()
-    var selectedTab by remember { mutableStateOf(TabItem.LIVE) }
+    val currencyOptions = listOf("USD", "INR", "GBP", "EUR", "AUD", "AED")
+
+    LaunchedEffect(state.authToken) {
+        if (state.authToken.isNotBlank()) {
+            while (true) {
+                vm.refreshMetalsAuto()
+                delay(5000)
+            }
+        }
+    }
 
     if (state.authToken.isBlank()) {
         AuthScreen(
@@ -98,32 +123,31 @@ fun RateScreen() {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    titleContentColor = MaterialTheme.colorScheme.onSecondary
+                ),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppIconBadge(size = 30.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.app_name))
+                    }
+                },
                 scrollBehavior = androidx.compose.material3.TopAppBarDefaults.pinnedScrollBehavior(
                     rememberTopAppBarState()
                 )
             )
-        },
-        bottomBar = {
-            NavigationBar {
-                TabItem.values().forEach { tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        icon = { TabIcon(tab) },
-                        label = { Text(tab.title) }
-                    )
-                }
-            }
         }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 if (state.apiKeyMissing) {
@@ -149,11 +173,33 @@ fun RateScreen() {
                 }
             }
 
-            when (selectedTab) {
-                TabItem.LIVE -> liveTab(state, vm)
-                TabItem.ALERTS -> alertsTab(state, vm)
-                TabItem.THRESHOLDS -> thresholdsTab(state, vm)
-                TabItem.SETTINGS -> settingsTab(state, vm)
+            item {
+                ForexRatesCard(
+                    baseCurrency = state.settings.baseCurrency,
+                    lastUpdatedMillis = state.lastRates.fxUpdatedEpochMillis,
+                    rates = state.lastRates.fxRates,
+                    previousRates = state.previousFxRates,
+                    onRefresh = vm::sendLiveUpdateNow,
+                    currencyOptions = currencyOptions,
+                    onBaseCurrencyChange = vm::updateBaseCurrency
+                )
+            }
+
+            item {
+                CurrencyConverterCard(
+                    baseCurrency = state.settings.baseCurrency,
+                    rates = state.lastRates.fxRates,
+                    currencyOptions = currencyOptions
+                )
+            }
+
+            item {
+                PreciousMetalsCard(
+                    baseCurrency = state.settings.baseCurrency,
+                    fxRates = state.lastRates.fxRates,
+                    metalsRates = state.lastRates.metalsRates,
+                    lastUpdatedMillis = state.lastRates.metalsUpdatedEpochMillis
+                )
             }
         }
     }
@@ -170,6 +216,11 @@ private fun TabIcon(tab: TabItem) {
 }
 
 private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
+    val currencyOptions = (state.settings.trackedCurrencies + state.settings.baseCurrency)
+        .map { it.uppercase() }
+        .toSortedSet()
+        .toList()
+
     item {
         if (state.lastRates.fxRates.isEmpty()) {
             Card(
@@ -177,7 +228,7 @@ private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
             ) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("FX data not loaded", style = MaterialTheme.typography.titleMedium)
+                    Text("Forex data not loaded", style = MaterialTheme.typography.titleMedium)
                     Text("Tap Send Live Update Now to fetch FX once.")
                 }
             }
@@ -193,25 +244,29 @@ private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
 
     item {
         RatesSection(
-            title = "FX Rates",
+            title = "Forex Rates",
             titleColor = MaterialTheme.colorScheme.primary,
             baseCurrency = state.settings.baseCurrency,
             rates = state.lastRates.fxRates,
+            dropdownOptions = currencyOptions,
+            selectedOption = state.settings.baseCurrency,
+            onOptionSelected = vm::updateBaseCurrency,
+            onRefresh = vm::sendLiveUpdateNow,
             showMetalAsGram = false,
-            containerColor = Color(0xFFF5F2FA)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
     item {
         RatesSection(
-            title = "Gold & Silver (Pure)",
+            title = "Precious Metals",
             titleColor = MaterialTheme.colorScheme.secondary,
             baseCurrency = state.settings.baseCurrency,
             rates = state.lastRates.metalsRates,
             onRefresh = vm::refreshMetalsOnly,
             onlyCodes = setOf("XAU", "XAG"),
             showMetalAsGram = true,
-            containerColor = Color(0xFFF3F2F7)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
@@ -224,7 +279,7 @@ private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
             onRefresh = vm::refreshMetalsOnly,
             onlyCodes = setOf("XAU22"),
             showMetalAsGram = true,
-            containerColor = Color(0xFFF7F2E8)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
@@ -239,6 +294,7 @@ private fun LazyListScope.liveTab(state: RateUiState, vm: RateViewModel) {
         )
     }
 }
+
 private fun LazyListScope.alertsTab(state: RateUiState, vm: RateViewModel) {
     item {
         AlertsSection(
@@ -270,8 +326,7 @@ private fun LazyListScope.settingsTab(state: RateUiState, vm: RateViewModel) {
             onUpdate = vm::updateBaseCurrency
         )
     }
-
-    item {
+item {
         ApiUsageSection(
             count = state.settings.monthlyRequestCount,
             limit = state.settings.monthlyRequestLimit,
@@ -290,20 +345,39 @@ private fun LazyListScope.settingsTab(state: RateUiState, vm: RateViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AuthScreen(
     authLoading: Boolean,
     authError: String?,
+    authOtpHint: String?,
+    authOtpRequested: Boolean,
     onLogin: (String, String) -> Unit,
-    onSignup: (String, String) -> Unit
+    onRequestOtp: (String) -> Unit,
+    onVerifyOtp: (String, String, String) -> Unit,
+    onResetOtp: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var otp by remember { mutableStateOf("") }
     var isSignup by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(title = { Text("Check Forex Rate") })
+            TopAppBar(
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    titleContentColor = MaterialTheme.colorScheme.onSecondary
+                ),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppIconBadge(size = 30.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.app_name))
+                    }
+                }
+            )
         }
     ) { padding ->
         Column(
@@ -313,52 +387,187 @@ private fun AuthScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { isSignup = false }) { Text("Login") }
-                Button(onClick = { isSignup = true }) { Text("Sign Up") }
-            }
+            if (!isSignup) {
+                Text("Login", style = MaterialTheme.typography.titleLarge)
 
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            if (!authError.isNullOrBlank()) {
-                Text(authError, color = MaterialTheme.colorScheme.error)
-            }
+                if (!authError.isNullOrBlank()) {
+                    Text(authError, color = MaterialTheme.colorScheme.error)
+                }
 
-            Button(
-                onClick = {
-                    if (isSignup) {
-                        onSignup(email.trim(), password)
-                    } else {
-                        onLogin(email.trim(), password)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { onLogin(email.trim(), password) },
+                        enabled = !authLoading,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (authLoading) "Please wait..." else "Login")
                     }
-                },
-                enabled = !authLoading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (authLoading) "Please wait..." else if (isSignup) "Create Account" else "Login")
+                    OutlinedButton(
+                        onClick = {
+                            isSignup = true
+                            otp = ""
+                            onResetOtp()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Sign Up")
+                    }
+                }
+            } else {
+                Text("Sign Up", style = MaterialTheme.typography.titleLarge)
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (!authError.isNullOrBlank()) {
+                    Text(authError, color = MaterialTheme.colorScheme.error)
+                }
+
+                Button(
+                    onClick = { onRequestOtp(email.trim()) },
+                    enabled = !authLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (authLoading) "Please wait..." else "Request OTP")
+                }
+
+                if (authOtpRequested) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            Modifier
+                                .padding(12.dp)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("Enter OTP", style = MaterialTheme.typography.titleMedium)
+                            OutlinedTextField(
+                                value = otp,
+                                onValueChange = { otp = it },
+                                label = { Text("OTP") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (!authOtpHint.isNullOrBlank()) {
+                                Text(
+                                    authOtpHint,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+
+                            Button(
+                                onClick = { onVerifyOtp(email.trim(), password, otp.trim()) },
+                                enabled = !authLoading,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (authLoading) "Please wait..." else "Sign Up")
+                            }
+                        }
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        isSignup = false
+                        otp = ""
+                        onResetOtp()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Back to Login")
+                }
             }
         }
     }
 }
+
 @Composable
-private fun RateHeader(baseCurrency: String, lastUpdated: Long, onRefresh: (() -> Unit)? = null,
-                       refreshing: Boolean = false) {
+private fun AppIconBadge(size: Dp) {
+    val gradient = Brush.linearGradient(
+        colors = listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.primary)
+    )
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(gradient, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("$", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("€", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("£", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("₹", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RateHeader(
+    baseCurrency: String,
+    lastUpdated: Long,
+    onRefresh: (() -> Unit)? = null,
+    refreshing: Boolean = false
+) {
     val text = if (lastUpdated > 0L) {
         val formatter = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
         "Updated ${formatter.format(Date(lastUpdated))}"
@@ -537,9 +746,13 @@ private fun RatesSection(
     onlyCodes: Set<String>? = null,
     showMetalAsGram: Boolean,
     containerColor: Color,
+    dropdownOptions: List<String>? = null,
+    selectedOption: String? = null,
+    onOptionSelected: ((String) -> Unit)? = null,
     onRefresh: (() -> Unit)? = null
 ) {
     val format = DecimalFormat("0.####")
+    var dropdownExpanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = containerColor)
@@ -550,10 +763,38 @@ private fun RatesSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(title, color = titleColor, style = MaterialTheme.typography.titleMedium)
-                if (onRefresh != null) {
-                    IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(title, color = titleColor, style = MaterialTheme.typography.titleMedium)
+                    if (onRefresh != null) {
+                        IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+
+                if (dropdownOptions != null && selectedOption != null && onOptionSelected != null) {
+                    Box {
+                        OutlinedButton(onClick = { dropdownExpanded = true }) {
+                            Text(selectedOption)
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            dropdownOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        dropdownExpanded = false
+                                        onOptionSelected(option)
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -585,6 +826,7 @@ private fun RatesSection(
         }
     }
 }
+
 @Composable
 private fun ThresholdSection(
     baseCurrency: String,
@@ -609,6 +851,7 @@ private fun ThresholdSection(
                     label = { Text("${displayName(code)} to $baseCurrency$labelSuffix") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
@@ -638,6 +881,7 @@ private fun TrackedCurrenciesSection(
                     onValueChange = { newCurrency = it.uppercase() },
                     label = { Text("Add ISO code") },
                     singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -646,6 +890,7 @@ private fun TrackedCurrenciesSection(
                     onValueChange = { newThreshold = it },
                     label = { Text("Threshold") },
                     singleLine = true,
+                    colors = appOutlinedTextFieldColors(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f)
                 )

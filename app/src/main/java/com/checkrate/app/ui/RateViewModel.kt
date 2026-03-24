@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.checkrate.app.BuildConfig
 import com.checkrate.app.data.AppSettings
-import com.checkrate.app.data.AuthApi
 import com.checkrate.app.data.AuthRepository
 import com.checkrate.app.data.ExchangeRateApi
 import com.checkrate.app.data.GoldApiClient
@@ -25,7 +24,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     private val settingsRepository = SettingsRepository(app)
     private val apiKey = BuildConfig.EXCHANGE_RATE_API_KEY
     private val repository = RateRepository(ExchangeRateApi(apiKey), GoldApiClient(), settingsRepository)
-    private val authRepository = AuthRepository(AuthApi(BuildConfig.AUTH_API_BASE_URL), settingsRepository)
+    private val authRepository = AuthRepository(settingsRepository)
 
     private val _refreshing = MutableStateFlow(false)
     private val _sendingLiveUpdate = MutableStateFlow(false)
@@ -34,39 +33,55 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     private val _authOtpHint = MutableStateFlow<String?>(null)
     private val _authOtpRequested = MutableStateFlow(false)
     private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _previousFxRates = MutableStateFlow<Map<String, Double>>(emptyMap())
 
     private val cooldownMinutes = 60
     private val softLimitRatio = 0.80
     private val hardLimitRatio = 0.95
 
     val uiState = combine(
-        settingsRepository.settingsFlow,
-        settingsRepository.lastRatesFlow,
-        settingsRepository.authTokenFlow,
-        settingsRepository.authEmailFlow,
-        _refreshing,
-        _sendingLiveUpdate,
-        _authLoading,
-        _authError,
-        _authOtpHint,
-        _authOtpRequested,
-        _errorMessage
-    ) { settings, lastRates, authToken, authEmail, refreshing, sendingLiveUpdate, authLoading, authError, authOtpHint, authOtpRequested, error ->
-        RateUiState(
-            settings = settings,
-            lastRates = lastRates,
-            apiKeyMissing = apiKey.isBlank(),
-            authToken = authToken,
-            authEmail = authEmail,
-            authLoading = authLoading,
-            authErrorMessage = authError,
-            authOtpHint = authOtpHint,
-            authOtpRequested = authOtpRequested,
-            isRefreshing = refreshing,
-            isSendingLiveUpdate = sendingLiveUpdate,
-            errorMessage = error
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, RateUiState())
+    settingsRepository.settingsFlow,
+    settingsRepository.lastRatesFlow,
+    _previousFxRates,
+    settingsRepository.authTokenFlow,
+    settingsRepository.authEmailFlow,
+    _refreshing,
+    _sendingLiveUpdate,
+    _authLoading,
+    _authError,
+    _authOtpHint,
+    _authOtpRequested,
+    _errorMessage
+) { values ->
+    val settings = values[0] as AppSettings
+    val lastRates = values[1] as LastRates
+    val previousFxRates = values[2] as Map<String, Double>
+    val authToken = values[3] as String
+    val authEmail = values[4] as String
+    val refreshing = values[5] as Boolean
+    val sendingLiveUpdate = values[6] as Boolean
+    val authLoading = values[7] as Boolean
+    val authError = values[8] as String?
+    val authOtpHint = values[9] as String?
+    val authOtpRequested = values[10] as Boolean
+    val error = values[11] as String?
+
+    RateUiState(
+        settings = settings,
+        lastRates = lastRates,
+        previousFxRates = previousFxRates,
+        apiKeyMissing = apiKey.isBlank(),
+        authToken = authToken,
+        authEmail = authEmail,
+        authLoading = authLoading,
+        authErrorMessage = authError,
+        authOtpHint = authOtpHint,
+        authOtpRequested = authOtpRequested,
+        isRefreshing = refreshing,
+        isSendingLiveUpdate = sendingLiveUpdate,
+        errorMessage = error
+    )
+}.stateIn(viewModelScope, SharingStarted.Eagerly, RateUiState())
 
     fun refreshRates() {
         if (apiKey.isBlank()) {
@@ -83,7 +98,9 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
                     _errorMessage.value = guard
                     return@launch
                 }
+                val previous = settingsRepository.getLastRates().fxRates
                 repository.fetchAndStore(settings.baseCurrency, settings.trackedCurrencies, settings.trackedMetals)
+                _previousFxRates.value = previous
             } catch (ex: Exception) {
                 _errorMessage.value = ex.message ?: "Failed to fetch rates"
             } finally {
@@ -113,6 +130,22 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+    fun refreshMetalsAuto() {
+        viewModelScope.launch {
+            try {
+                val settings = settingsRepository.getSettings()
+                val lastRates = settingsRepository.getLastRates()
+                val base = settings.baseCurrency.uppercase()
+                val usdToBase = if (base == "USD") 1.0 else lastRates.fxRates["USD"]
+                if (usdToBase == null) {
+                    return@launch
+                }
+                repository.fetchMetalsOnly(settings.baseCurrency, usdToBase)
+            } catch (_: Exception) {
+                // Ignore background refresh failures
+            }
+        }
+    }
 
     fun sendLiveUpdateNow() {
         if (apiKey.isBlank()) {
@@ -129,7 +162,10 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
                     _errorMessage.value = guard
                     return@launch
                 }
-                val lastRates = repository.fetchAndStore(settings.baseCurrency, settings.trackedCurrencies, settings.trackedMetals)
+                val previous = settingsRepository.getLastRates().fxRates
+                repository.fetchAndStore(settings.baseCurrency, settings.trackedCurrencies, settings.trackedMetals)
+                _previousFxRates.value = previous
+                val lastRates = settingsRepository.getLastRates()
                 val fxSummary = RateUtils.buildSummary(settings.baseCurrency, lastRates.fxRates, settings.trackedCurrencies)
                 val metalSummary = RateUtils.buildMetalSummary(settings.baseCurrency, lastRates.metalsRates, setOf("XAU", "XAG", "XAU22"))
                 val summary = "$fxSummary | $metalSummary"
@@ -155,11 +191,6 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
             return "Monthly API limit reached. Try again next month."
         }
 
-        if (sinceLast in 1 until cooldownMs) {
-            val minutesLeft = ((cooldownMs - sinceLast) / 60000L).coerceAtLeast(1)
-            return "Please wait $minutesLeft min before the next update."
-        }
-
         if (usageRatio >= softLimitRatio) {
             _errorMessage.value = "Warning: ${"%.0f".format(usageRatio * 100)}% of monthly quota used."
         }
@@ -169,6 +200,10 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateBaseCurrency(value: String) {
         viewModelScope.launch { settingsRepository.setBaseCurrency(value) }
+    }
+
+    fun setAuthApiBaseUrl(value: String) {
+        viewModelScope.launch { settingsRepository.setAuthApiBaseUrl(value) }
     }
 
     fun addCurrency(code: String) {
@@ -275,6 +310,7 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
 data class RateUiState(
     val settings: AppSettings = AppSettings(),
     val lastRates: LastRates = LastRates(),
+    val previousFxRates: Map<String, Double> = emptyMap(),
     val apiKeyMissing: Boolean = false,
     val authToken: String = "",
     val authEmail: String = "",

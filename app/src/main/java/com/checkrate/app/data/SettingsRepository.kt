@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.checkrate.app.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -37,19 +38,22 @@ class SettingsRepository(private val context: Context) {
         val lastRequestEpoch = longPreferencesKey("last_request_epoch")
         val authToken = stringPreferencesKey("auth_token")
         val authEmail = stringPreferencesKey("auth_email")
+        val authApiBaseUrl = stringPreferencesKey("auth_api_base_url")
     }
 
     private val defaultMetals = setOf("XAU", "XAG", "XAU22")
+    private val requiredTracked = setOf("USD", "GBP", "EUR", "AUD", "AED", "INR")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
-        val base = prefs[Keys.baseCurrency] ?: "INR"
-        val tracked = prefs[Keys.trackedCurrencies] ?: setOf("USD", "GBP")
+        val base = prefs[Keys.baseCurrency] ?: "USD"
+        val tracked = (prefs[Keys.trackedCurrencies] ?: requiredTracked) + requiredTracked
         val thresholds = jsonToThresholds(prefs[Keys.thresholdsJson])
         val alertsEnabled = prefs[Keys.alertsEnabled] ?: true
         val dailySummaryEnabled = prefs[Keys.dailySummaryEnabled] ?: true
         val liveModeEnabled = prefs[Keys.liveModeEnabled] ?: false
         val liveModeInterval = prefs[Keys.liveModeInterval] ?: 60
         val lastRequestEpoch = prefs[Keys.lastRequestEpoch] ?: 0L
+        val authApiBaseUrl = prefs[Keys.authApiBaseUrl] ?: BuildConfig.AUTH_API_BASE_URL.ifBlank { "https://checkforex-backend.onrender.com" }
 
         val currentMonth = currentMonthKey()
         val storedMonth = prefs[Keys.monthlyRequestMonth] ?: currentMonth
@@ -71,7 +75,8 @@ class SettingsRepository(private val context: Context) {
             monthlyRequestCount = count,
             monthlyRequestLimit = 100,
             requestMonthKey = currentMonth,
-            lastRequestEpochMillis = lastRequestEpoch
+            lastRequestEpochMillis = lastRequestEpoch,
+            authApiBaseUrl = authApiBaseUrl
         )
     }
 
@@ -104,9 +109,14 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.baseCurrency] = value.uppercase() }
     }
 
+    suspend fun setAuthApiBaseUrl(value: String) {
+        val trimmed = value.trim().ifBlank { BuildConfig.AUTH_API_BASE_URL.ifBlank { "https://checkforex-backend.onrender.com" } }
+        context.dataStore.edit { it[Keys.authApiBaseUrl] = trimmed }
+    }
+
     suspend fun addTrackedCurrency(code: String) {
         context.dataStore.edit { prefs ->
-            val current = prefs[Keys.trackedCurrencies] ?: setOf("USD", "GBP")
+            val current = prefs[Keys.trackedCurrencies] ?: requiredTracked
             val updated = current + code.uppercase()
             prefs[Keys.trackedCurrencies] = updated
             val thresholds = jsonToThresholds(prefs[Keys.thresholdsJson])
@@ -119,7 +129,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun removeTrackedCurrency(code: String) {
         context.dataStore.edit { prefs ->
-            val current = prefs[Keys.trackedCurrencies] ?: setOf("USD", "GBP")
+            val current = prefs[Keys.trackedCurrencies] ?: requiredTracked
             prefs[Keys.trackedCurrencies] = current - code.uppercase()
             val thresholds = jsonToThresholds(prefs[Keys.thresholdsJson])
             thresholds.remove(code.uppercase())

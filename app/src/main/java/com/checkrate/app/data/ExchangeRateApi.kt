@@ -18,7 +18,7 @@ class ExchangeRateApi(private val apiKey: String) {
         }
 
         val currencyList = currencies.joinToString(",")
-        val endpoint = "http://api.currencylayer.com/live?access_key=$apiKey&currencies=$currencyList"
+        val endpoint = "http://apilayer.net/api/live?access_key=$apiKey&currencies=$currencyList"
         val connection = URL(endpoint).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 10000
