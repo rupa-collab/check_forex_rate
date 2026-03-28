@@ -99,12 +99,10 @@ fun RateScreen() {
     val state by vm.uiState.collectAsState()
     val currencyOptions = listOf("USD", "INR", "GBP", "EUR", "AUD", "AED")
 
-    LaunchedEffect(state.authToken) {
-        if (state.authToken.isNotBlank()) {
-            while (true) {
-                vm.refreshMetalsAuto()
-                delay(5000)
-            }
+    LaunchedEffect(Unit) {
+        while (true) {
+            vm.refreshMetalsAuto()
+            delay(5000)
         }
     }
 

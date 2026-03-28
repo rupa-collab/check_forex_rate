@@ -28,7 +28,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import com.checkrate.app.ui.appOutlinedTextFieldColors
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -45,7 +44,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.checkrate.app.util.RateUtils
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,13 +52,25 @@ import kotlin.math.abs
 
 private data class ForexDisplay(val code2: String, val target: String)
 
-private val forexDisplayList = listOf(
-    ForexDisplay("IN", "INR"),
-    ForexDisplay("GB", "GBP"),
-    ForexDisplay("EU", "EUR"),
-    ForexDisplay("AU", "AUD"),
-    ForexDisplay("AE", "AED")
+private val forexTargets = listOf("INR", "GBP", "EUR", "AUD", "AED")
+private val forexCode2 = mapOf(
+    "INR" to "IN",
+    "GBP" to "GB",
+    "EUR" to "EU",
+    "AUD" to "AU",
+    "AED" to "AE",
+    "USD" to "US"
 )
+
+private fun forexDisplayList(baseCurrency: String): List<ForexDisplay> {
+    val base = baseCurrency.uppercase()
+    val targets = if (base != "USD" && forexTargets.contains(base)) {
+        forexTargets.map { if (it == base) "USD" else it }
+    } else {
+        forexTargets
+    }
+    return targets.map { target -> ForexDisplay(forexCode2[target] ?: target.take(2), target) }
+}
 
 @Composable
 internal fun ForexRatesCard(
@@ -115,7 +125,7 @@ internal fun ForexRatesCard(
 
             Spacer(Modifier.height(12.dp))
 
-            forexDisplayList.forEach { item ->
+            forexDisplayList(baseCurrency).forEach { item ->
                 val storedRate = rates[item.target]
                 val storedPrev = previousRates[item.target]
                 val displayRate = storedRate?.let { if (it == 0.0) null else 1.0 / it }
@@ -315,10 +325,10 @@ internal fun PreciousMetalsCard(
 
     val usdPerBase = if (baseCurrency.uppercase() == "USD") 1.0 else fxRates["USD"]
     val goldUsd = metalsRates["XAU"]?.let { basePerGram ->
-        if (usdPerBase == null) null else (basePerGram / usdPerBase) * RateUtils.GRAMS_PER_TROY_OUNCE
+        if (usdPerBase == null) null else (basePerGram / usdPerBase)
     }
     val silverUsd = metalsRates["XAG"]?.let { basePerGram ->
-        if (usdPerBase == null) null else (basePerGram / usdPerBase) * RateUtils.GRAMS_PER_TROY_OUNCE
+        if (usdPerBase == null) null else (basePerGram / usdPerBase)
     }
 
     val inrPerUsd = fxRates["USD"]?.let { basePerUsd ->
@@ -358,13 +368,13 @@ internal fun PreciousMetalsCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Switch(
-                        checked = showUsd,
-                        onCheckedChange = { showUsd = it },
+                        checked = !showUsd,
+                        onCheckedChange = { showUsd = !it },
                         modifier = Modifier.padding(horizontal = 6.dp),
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = MaterialTheme.colorScheme.secondary,
                             checkedTrackColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f),
-                            uncheckedThumbColor = Color(0xFF6B7280),
+                            uncheckedThumbColor = MaterialTheme.colorScheme.secondary,
                             uncheckedTrackColor = Color(0xFFCBCED4)
                         )
                     )
@@ -456,7 +466,7 @@ private fun MetalRateItem(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(2.dp))
-                Text("${currency}/oz", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${currency}/g", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -498,8 +508,8 @@ private fun convertAmount(
     base: String,
     rates: Map<String, Double>
 ): Double? {
-    val basePerFrom = if (from.uppercase() == base.uppercase()) 1.0 else rates[from.uppercase()]
-    val basePerTo = if (to.uppercase() == base.uppercase()) 1.0 else rates[to.uppercase()]
+    val basePerFrom = if (from.equals(base, ignoreCase = true)) 1.0 else rates[from.uppercase()]
+    val basePerTo = if (to.equals(base, ignoreCase = true)) 1.0 else rates[to.uppercase()]
     if (basePerFrom == null || basePerTo == null) return null
     return amount * (basePerFrom / basePerTo)
 }

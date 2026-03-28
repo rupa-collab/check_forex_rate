@@ -199,8 +199,39 @@ class RateViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateBaseCurrency(value: String) {
-        viewModelScope.launch { settingsRepository.setBaseCurrency(value) }
+        viewModelScope.launch {
+            _errorMessage.value = null
+            val newBase = value.uppercase()
+            try {
+                val settings = settingsRepository.getSettings()
+                val oldBase = settings.baseCurrency.uppercase()
+                if (oldBase == newBase) return@launch
+                val lastRates = settingsRepository.getLastRates()
+                val oldRates = lastRates.fxRates
+                val pivot = oldRates[newBase]
+                if (pivot == null || pivot == 0.0) {
+                    settingsRepository.setBaseCurrency(newBase)
+                    _errorMessage.value = "Missing rate for $newBase. Tap Refresh to update."
+                    return@launch
+                }
+                val factor = 1.0 / pivot
+                val rebasedFx = oldRates.mapValues { (code, rate) ->
+                    if (code == newBase) 1.0 else rate * factor
+                }
+                val rebasedMetals = lastRates.metalsRates.mapValues { (_, rate) -> rate * factor }
+                settingsRepository.setBaseCurrency(newBase)
+                settingsRepository.saveRebasedRates(
+                    rebasedFx + rebasedMetals,
+                    lastRates.fxUpdatedEpochMillis,
+                    lastRates.metalsUpdatedEpochMillis
+                )
+                _previousFxRates.value = rebasedFx
+            } catch (ex: Exception) {
+                _errorMessage.value = ex.message ?: "Failed to update base currency"
+            }
+        }
     }
+
 
     fun setAuthApiBaseUrl(value: String) {
         viewModelScope.launch { settingsRepository.setAuthApiBaseUrl(value) }

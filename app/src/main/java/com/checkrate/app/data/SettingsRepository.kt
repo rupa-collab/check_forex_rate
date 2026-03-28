@@ -17,6 +17,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.max
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -168,6 +169,20 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.lastUpdatedFx] = timestampMillis.toString()
             prefs[Keys.lastUpdatedMetals] = timestampMillis.toString()
             prefs[Keys.lastRequestEpoch] = timestampMillis
+        }
+    }
+
+    suspend fun saveRebasedRates(
+        rates: Map<String, Double>,
+        fxUpdatedMillis: Long,
+        metalsUpdatedMillis: Long
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.lastRatesJson] = ratesToJson(rates)
+            prefs[Keys.lastUpdatedFx] = fxUpdatedMillis.toString()
+            prefs[Keys.lastUpdatedMetals] = metalsUpdatedMillis.toString()
+            val lastUpdated = max(fxUpdatedMillis, metalsUpdatedMillis)
+            prefs[Keys.lastUpdated] = lastUpdated.toString()
         }
     }
 
